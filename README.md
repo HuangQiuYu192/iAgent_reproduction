@@ -44,6 +44,20 @@ The runner accepts JSONL records in this minimal form:
 
 For a strict reproduction, download the four InstructRec releases linked by the [authors' repository](https://github.com/WujiangXu/iAgent), then write a narrow converter that preserves the provided instructions exactly. Do not regenerate them if you want a direct comparison.
 
+The official release is read directly by the included adapter. Its `.pkl` and `.csv` files belong in `data/instructrec/` and are intentionally Git-ignored:
+
+```powershell
+pip install -e .[instructrec]
+python -m iagent_reproduction.run_instructrec --domain books --agent iagent --backend teaching --users 5
+python -m iagent_reproduction.run_instructrec --domain books --agent i2agent --backend teaching --users 5
+```
+
+Use Qwen only after this smoke test passes. i²Agent runs one profile-update LLM call per training interaction, so begin with one user:
+
+```powershell
+python -m iagent_reproduction.run_instructrec --domain books --agent i2agent --backend qwen --model qwen-plus --users 1
+```
+
 ## Learning map
 
 1. Start with `demo.py`: parser outputs instruction knowledge; reranker must return a permutation of the platform slate.

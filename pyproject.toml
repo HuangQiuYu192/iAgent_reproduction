@@ -11,6 +11,7 @@ requires-python = ">=3.10"
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 qwen = ["openai>=1.40"]
+instructrec = ["pandas>=1.5"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

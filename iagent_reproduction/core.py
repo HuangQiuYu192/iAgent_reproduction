@@ -90,6 +90,20 @@ class I2Agent(IAgent):
         positive = max(history, key=lambda row: row.timestamp)
         self.profile = self.backend.update_profile(self.profile, positive, negative)
 
+    def fit_from_history(self, history: list[Interaction], negative_pool: list[Item]) -> None:
+        """Apply Eq. 3-4 sequentially on this user's training interactions only.
+
+        The original code samples one non-interacted negative per feedback
+        update. Cycling through the supplied pool is deterministic, which keeps
+        a Qwen run reproducible apart from provider-side infrastructure.
+        """
+        if not negative_pool:
+            raise ValueError("i²Agent profile fitting needs at least one negative item")
+        for index, interaction in enumerate(sorted(history, key=lambda row: row.timestamp)):
+            self.profile = self.backend.update_profile(
+                self.profile, interaction, negative_pool[index % len(negative_pool)]
+            )
+
     def rank(self, history: list[Interaction], instruction: str, candidates: list[Item]) -> list[str]:
         parsed = self.backend.parse(instruction)
         external = self.backend.retrieve(parsed.keywords) if parsed.use_tools else ""

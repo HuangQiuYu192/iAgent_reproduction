@@ -24,3 +24,10 @@ def test_i2agent_updates_only_its_own_profile():
     first.learn_feedback(history, candidates[1])
     assert first.profile != second.profile
     assert set(first.rank(history, "science fiction", candidates)) == {"good", "bad"}
+
+
+def test_i2agent_can_fit_sequential_feedback():
+    history, candidates = sample()
+    agent = I2Agent(TeachingBackend())
+    agent.fit_from_history(history, candidates)
+    assert agent.profile != "No individual profile has been learned yet."
