@@ -8,6 +8,7 @@ set -Eeuo pipefail
 ENV_NAME="${IAGENT_ENV_NAME:-iagent-qwen-cu121}"
 PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
 VLLM_VERSION="${VLLM_VERSION:-0.6.3.post1}"
+TRANSFORMERS_VERSION="${TRANSFORMERS_VERSION:-4.45.2}"
 
 if ! command -v nvidia-smi >/dev/null; then
   echo "nvidia-smi was not found. Run this on the GPU Jupyter server." >&2
@@ -32,7 +33,8 @@ fi
 conda run -n "${ENV_NAME}" python -m pip install --upgrade pip
 # vLLM 0.6.3's released Linux wheel is compiled for CUDA 12.1, which is
 # compatible with a CUDA 12.2 driver. Keep this pin for reproducibility.
-conda run -n "${ENV_NAME}" python -m pip install "vllm==${VLLM_VERSION}" "openai>=1.40" "pandas>=1.5"
+conda run -n "${ENV_NAME}" python -m pip install "vllm==${VLLM_VERSION}" \
+  "transformers==${TRANSFORMERS_VERSION}" "openai>=1.40" "pandas>=1.5"
 conda run -n "${ENV_NAME}" python -c "import torch, vllm; print('torch:', torch.__version__, 'cuda:', torch.cuda.is_available()); print('vllm:', vllm.__version__)"
 
 cat <<EOF
