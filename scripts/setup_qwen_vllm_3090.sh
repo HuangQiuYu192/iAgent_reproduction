@@ -35,7 +35,7 @@ conda run -n "${ENV_NAME}" python -m pip install --upgrade pip
 # compatible with a CUDA 12.2 driver. Keep this pin for reproducibility.
 conda run -n "${ENV_NAME}" python -m pip install "vllm==${VLLM_VERSION}" \
   "transformers==${TRANSFORMERS_VERSION}" "numpy==1.26.4" "fsspec==2026.6.0" \
-  pyairports "openai>=1.40" "pandas>=1.5"
+  lm-format-enforcer "openai>=1.40" "pandas>=1.5"
 conda run -n "${ENV_NAME}" python -c "import torch, vllm; print('torch:', torch.__version__, 'cuda:', torch.cuda.is_available()); print('vllm:', vllm.__version__)"
 
 cat <<EOF

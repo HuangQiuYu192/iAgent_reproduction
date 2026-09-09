@@ -21,4 +21,5 @@ exec vllm serve "${MODEL_ID}" \
   --host "${HOST}" --port "${PORT}" --api-key "${API_KEY}" \
   --dtype half --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION}" \
   --max-model-len "${MAX_MODEL_LEN}" --max-num-seqs "${MAX_NUM_SEQS}" \
-  --max-num-batched-tokens "${MAX_MODEL_LEN}"
+  --max-num-batched-tokens "${MAX_MODEL_LEN}" \
+  --guided-decoding-backend lm-format-enforcer
