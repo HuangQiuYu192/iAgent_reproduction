@@ -2,8 +2,12 @@
 # Install the reproducible local-Qwen runtime from a Jupyter/Linux terminal.
 set -Eeuo pipefail
 
-ENV_NAME="${IAGENT_ENV_NAME:-iagent-qwen}"
-PYTHON_VERSION="${PYTHON_VERSION:-3.11}"
+# The server that motivated this script exposes CUDA driver 12.2.  Pin a vLLM
+# CUDA-12.1 wheel: newer vLLM releases may install a PyTorch CUDA runtime that
+# requires a newer NVIDIA driver.
+ENV_NAME="${IAGENT_ENV_NAME:-iagent-qwen-cu121}"
+PYTHON_VERSION="${PYTHON_VERSION:-3.10}"
+VLLM_VERSION="${VLLM_VERSION:-0.6.3.post1}"
 
 if ! command -v nvidia-smi >/dev/null; then
   echo "nvidia-smi was not found. Run this on the GPU Jupyter server." >&2
@@ -26,8 +30,9 @@ if ! conda env list | awk '{print $1}' | grep -Fxq "${ENV_NAME}"; then
 fi
 
 conda run -n "${ENV_NAME}" python -m pip install --upgrade pip
-# vLLM selects a CUDA wheel compatible with the server's installed driver.
-conda run -n "${ENV_NAME}" python -m pip install "vllm>=0.8.5" "openai>=1.40" "pandas>=1.5"
+# vLLM 0.6.3's released Linux wheel is compiled for CUDA 12.1, which is
+# compatible with a CUDA 12.2 driver. Keep this pin for reproducibility.
+conda run -n "${ENV_NAME}" python -m pip install "vllm==${VLLM_VERSION}" "openai>=1.40" "pandas>=1.5"
 conda run -n "${ENV_NAME}" python -c "import torch, vllm; print('torch:', torch.__version__, 'cuda:', torch.cuda.is_available()); print('vllm:', vllm.__version__)"
 
 cat <<EOF
