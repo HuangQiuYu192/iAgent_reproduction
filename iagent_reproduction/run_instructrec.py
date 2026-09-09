@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 
 from .backends import QwenBackend, TeachingBackend
@@ -18,9 +19,13 @@ def main() -> None:
     parser.add_argument("--agent", choices=("iagent", "i2agent"), default="iagent")
     parser.add_argument("--backend", choices=("teaching", "qwen"), default="teaching")
     parser.add_argument("--model", default="qwen-plus")
+    parser.add_argument("--base-url", default=os.environ.get("IAGENT_OPENAI_BASE_URL"),
+                        help="OpenAI-compatible endpoint; defaults to DashScope when unset.")
     parser.add_argument("--users", type=int, default=5)
     args = parser.parse_args()
-    backend = QwenBackend(args.model) if args.backend == "qwen" else TeachingBackend()
+    backend = (QwenBackend(model=args.model, base_url=args.base_url)
+               if args.backend == "qwen" and args.base_url else
+               QwenBackend(model=args.model) if args.backend == "qwen" else TeachingBackend())
     rows = []
     for example in load_examples(args.data, args.domain, args.users):
         agent = I2Agent(backend) if args.agent == "i2agent" else IAgent(backend)

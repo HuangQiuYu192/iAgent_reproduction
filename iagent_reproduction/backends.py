@@ -56,9 +56,10 @@ class QwenBackend:
     api_key: str | None = None
 
     def __post_init__(self) -> None:
-        self.api_key = self.api_key or os.environ.get("DASHSCOPE_API_KEY")
+        self.api_key = (self.api_key or os.environ.get("IAGENT_API_KEY")
+                        or os.environ.get("DASHSCOPE_API_KEY"))
         if not self.api_key:
-            raise RuntimeError("Set DASHSCOPE_API_KEY; never store it in source code or Git.")
+            raise RuntimeError("Set IAGENT_API_KEY (local vLLM) or DASHSCOPE_API_KEY; never store it in Git.")
 
     def _chat(self, prompt: str) -> str:
         try:
@@ -66,9 +67,17 @@ class QwenBackend:
         except ImportError as exc:
             raise RuntimeError("Install API support: pip install -e .[qwen]") from exc
         client = OpenAI(base_url=self.base_url, api_key=self.api_key)
-        answer = client.chat.completions.create(model=self.model, temperature=0,
-            messages=[{"role": "system", "content": "Follow the output contract exactly."}, {"role": "user", "content": prompt}],
-            extra_body={"enable_thinking": False})
+        request = {
+            "model": self.model,
+            "temperature": 0,
+            "messages": [{"role": "system", "content": "Follow the output contract exactly."},
+                         {"role": "user", "content": prompt}],
+        }
+        # DashScope accepts this switch; a stock vLLM OpenAI server should not
+        # receive provider-specific request fields.
+        if "dashscope" in self.base_url.casefold():
+            request["extra_body"] = {"enable_thinking": False}
+        answer = client.chat.completions.create(**request)
         if not answer.choices[0].message.content:
             raise RuntimeError("Empty Qwen response")
         return answer.choices[0].message.content

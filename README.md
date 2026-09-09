@@ -8,7 +8,7 @@ It implements the paper's inference structure and the personal feedback loop of 
 - **i²Agent:** individual profile generator over feedback -> instruction-relative dynamic extractor -> reranker -> self-reflection.
 - **Evaluation:** leave-one-out next-item prediction, one positive plus nine seeded negatives, HR@1/3, NDCG@3, and MRR.
 
-The default backend is deterministic and runs without an API key, so every transition is inspectable. A Qwen/DashScope OpenAI-compatible backend is included for the actual LLM calls.
+The default backend is deterministic and runs without an API key, so every transition is inspectable. A Qwen OpenAI-compatible backend supports both DashScope and a self-hosted vLLM server.
 
 ## Why this is a functional reproduction, not yet a claims-level replication
 
@@ -25,7 +25,7 @@ python -m iagent_reproduction.demo
 pytest -q
 ```
 
-## Use Qwen through API
+## Use Qwen through API or a local 3090
 
 ```powershell
 pip install -e .[qwen]
@@ -33,6 +33,14 @@ $env:DASHSCOPE_API_KEY = 'your-key-here'
 ```
 
 Do not commit the key. The Qwen client uses the DashScope OpenAI-compatible endpoint and forces `temperature=0`; invoke it by constructing `QwenBackend` in your experiment script.
+
+For repeated experiments, run Qwen locally on the Jupyter server's RTX 3090 rather than paying per API token. The repository includes installation, service, and health-check scripts plus the exact experiment command in [docs/qwen_3090.md](docs/qwen_3090.md). Once the local server is running, use:
+
+```bash
+export IAGENT_API_KEY='the-same-local-secret'
+export IAGENT_OPENAI_BASE_URL='http://127.0.0.1:8000/v1'
+python -m iagent_reproduction.run_instructrec --domain books --agent iagent --backend qwen --model Qwen/Qwen2.5-7B-Instruct --users 1
+```
 
 ## Data contract
 
