@@ -60,6 +60,8 @@ python -m iagent_reproduction.run_instructrec --domain books --agent iagent --ba
 python -m iagent_reproduction.run_instructrec --domain books --agent i2agent --backend teaching --users 5
 ```
 
+Released item descriptions and reviews can exceed a local 7B model's context window. The Qwen runner therefore logs deterministic prompt budgets (`--max-static-chars 6000` and `--max-candidate-chars 600`). Treat them as experimental settings and report them with every result; increase only after verifying that the local server remains stable.
+
 Use Qwen only after this smoke test passes. i²Agent runs one profile-update LLM call per training interaction, so begin with one user:
 
 ```powershell

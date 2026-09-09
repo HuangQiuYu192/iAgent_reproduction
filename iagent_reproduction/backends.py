@@ -54,6 +54,8 @@ class QwenBackend:
     model: str = "qwen-plus"
     base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
     api_key: str | None = None
+    max_static_chars: int = 6000
+    max_candidate_chars: int = 600
 
     def __post_init__(self) -> None:
         self.api_key = (self.api_key or os.environ.get("IAGENT_API_KEY")
@@ -86,6 +88,12 @@ class QwenBackend:
     def _json(text: str):
         return json.loads(re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.I))
 
+    @staticmethod
+    def _clip(text: object, limit: int) -> str:
+        """Bound prompt growth deterministically while preserving a readable prefix."""
+        normalized = " ".join(str(text).split())
+        return normalized if len(normalized) <= limit else normalized[:limit - 1] + "…"
+
     def parse(self, instruction: str) -> ParsedInstruction:
         row = self._json(self._chat(PARSER_PROMPT.format(instruction=instruction)))
         return ParsedInstruction(str(row["internal_knowledge"]), tuple(map(str, row.get("keywords", []))), bool(row.get("use_tools")))
@@ -97,17 +105,26 @@ class QwenBackend:
 
     def rerank(self, *, instruction: str, internal: str, external: str, static_memory: str,
                candidates: list[Item], dynamic: DynamicMemory | None = None) -> list[str]:
-        listing = "\n".join(f"{item.item_id} | {item.document}" for item in candidates)
+        listing = "\n".join(
+            f"{item.item_id} | {self._clip(item.document, self.max_candidate_chars)}"
+            for item in candidates
+        )
         memory = "" if dynamic is None else f"{dynamic.profile}; interests={list(dynamic.interests)}"
         return list(map(str, self._json(self._chat(RERANK_PROMPT.format(instruction=instruction, internal=internal,
-            external=external, static_memory=static_memory, dynamic=memory, candidates=listing)))))
+            external=external, static_memory=self._clip(static_memory, self.max_static_chars),
+            dynamic=memory, candidates=listing)))))
 
     def update_profile(self, previous: str, positive: Interaction, negative: Item) -> str:
-        return self._chat(PROFILE_PROMPT.format(previous=previous, positive=positive.item.document,
-            review=positive.review, negative=negative.document)).strip()
+        return self._chat(PROFILE_PROMPT.format(
+            previous=self._clip(previous, self.max_static_chars),
+            positive=self._clip(positive.item.document, self.max_candidate_chars),
+            review=self._clip(positive.review, self.max_candidate_chars),
+            negative=self._clip(negative.document, self.max_candidate_chars),
+        )).strip()
 
     def extract_dynamic(self, profile: str, static_memory: str, instruction: str,
                         internal: str, external: str) -> DynamicMemory:
-        row = self._json(self._chat(EXTRACT_PROMPT.format(profile=profile, static_memory=static_memory,
+        row = self._json(self._chat(EXTRACT_PROMPT.format(profile=profile,
+            static_memory=self._clip(static_memory, self.max_static_chars),
             instruction=instruction, internal=internal, external=external)))
         return DynamicMemory(str(row["profile"]), tuple(map(str, row.get("interests", []))))
