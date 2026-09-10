@@ -81,7 +81,9 @@ class OfficialQwenAgent:
     def __init__(self, *, model: str, base_url: str, api_key: str, agent_type: str, rng: random.Random):
         from openai import OpenAI
 
-        self.client = OpenAI(base_url=base_url, api_key=api_key)
+        # A bounded client timeout prevents a single malformed generation from
+        # blocking a multi-day checkpointed run indefinitely.
+        self.client = OpenAI(base_url=base_url, api_key=api_key, timeout=120.0)
         self.model, self.agent_type, self.rng = model, agent_type, rng
 
     @staticmethod
@@ -90,13 +92,14 @@ class OfficialQwenAgent:
                 "schema": {"type": "object", "properties": properties, "required": required,
                            "additionalProperties": False}}}
 
-    def _ask(self, messages: list[dict[str, str]], properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
+    def _ask(self, messages: list[dict[str, str]], properties: dict[str, Any], required: list[str],
+             max_tokens: int = 512) -> dict[str, Any]:
         last_error: Exception | None = None
         for attempt in range(3):
             try:
                 response = self.client.chat.completions.create(
                     model=self.model, messages=messages, temperature=0,
-                    response_format=self._schema(properties, required),
+                    response_format=self._schema(properties, required), max_tokens=max_tokens,
                 )
                 return json.loads(response.choices[0].message.content or "")
             except Exception as exc:  # provider errors and invalid JSON share the same retry policy
@@ -128,7 +131,8 @@ class OfficialQwenAgent:
     def _rerank(self, messages: list[dict[str, str]], prompt: str, candidates: list[int]) -> list[int]:
         properties, required = self._rank_schema()
         for retry in range(4):
-            response = self._ask(messages + [{"role": "assistant", "content": prompt}], properties, required)
+            response = self._ask(messages + [{"role": "assistant", "content": prompt}], properties, required,
+                                 max_tokens=512)
             ranked = [int(item) for item in response["rerank_list"]]
             if len(ranked) == len(candidates) and set(ranked) == set(candidates):
                 return ranked
@@ -142,7 +146,7 @@ class OfficialQwenAgent:
                             "Do not directly recommend specific items. \n. Don’t use numerical numbering for the "
                             f"generated content; you can use bullet points instead. \n Instruction:{example.instruction}")
         messages = [{"role": "assistant", "content": knowledge_prompt}]
-        knowledge = self._ask(messages, {"knowledge": {"type": "string"}}, ["knowledge"])["knowledge"]
+        knowledge = self._ask(messages, {"knowledge": {"type": "string"}}, ["knowledge"], max_tokens=256)["knowledge"]
         prompt = ("Based on the information, give recommendations for the user based on the constraints. .\n "
                   "Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
                   f"Candidate ranking list:{self._candidate_text(example, mapping)},Knowledge:{knowledge},"
@@ -162,19 +166,21 @@ class OfficialQwenAgent:
                  f"The first one title:{titles[-2]}, descrition:{_tail(descriptions[-2])}. "
                  f"The second one title:{negative_title}, description:{_tail(negative_description)}. ")
         profile_messages.append({"role": "assistant", "content": first})
-        recommendation = self._ask(profile_messages, {"recommend_content": {"type": "string"}}, ["recommend_content"])["recommend_content"]
+        recommendation = self._ask(profile_messages, {"recommend_content": {"type": "string"}},
+                                   ["recommend_content"], max_tokens=256)["recommend_content"]
         profile_messages.append({"role": "assistant", "content": f"The recommend content: {recommendation} \n. "})
         second = (f"\n. Great! Actually, this user choose the item with title:{titles[-2]} and review:{_tail(reviews[-2])}. "
                   "Can you generate the profile of this user background? Please make a detailed profile. "
                   "Don’t use numerical numbering for the generated content; you can use bullet points instead.")
         profile = self._ask(profile_messages + [{"role": "assistant", "content": second}],
-                            {"profile": {"type": "string"}}, ["profile"])["profile"]
+                            {"profile": {"type": "string"}}, ["profile"], max_tokens=512)["profile"]
         knowledge_messages = [{"role": "assistant", "content":
             "Based on the following instruction, assist me in generating relevant knowledge. Please specify the types "
             "of descriptions that the recommended items should include. Do not directly recommend specific items. \n. "
             "Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
             f"Instruction:{example.instruction}"}]
-        knowledge = self._ask(knowledge_messages, {"knowledge": {"type": "string"}}, ["knowledge"])["knowledge"]
+        knowledge = self._ask(knowledge_messages, {"knowledge": {"type": "string"}}, ["knowledge"],
+                              max_tokens=256)["knowledge"]
         memory = "".join(f"user historical information, item title:{title},item description:{_tail(description)} ;"
                          for title, description in zip(titles, descriptions))
         dynamic_prompt = ("Based on the generated knowledge and the instruction, extract some dynamic interest information "
@@ -184,7 +190,7 @@ class OfficialQwenAgent:
                           f"Historical Information:{memory} Profile:{profile}")
         dynamic = self._ask(knowledge_messages + [{"role": "assistant", "content": dynamic_prompt}],
                             {"dynamic_interest": {"type": "string"}, "dynamic_profile": {"type": "string"}},
-                            ["dynamic_interest", "dynamic_profile"])
+                            ["dynamic_interest", "dynamic_profile"], max_tokens=512)
         final = ("Based on the information, give recommendations for the user based on the constrains. .\n "
                  "Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
                  f"Candidate ranking list:{self._candidate_text(example, mapping)},Knowledge:{knowledge},"
