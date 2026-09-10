@@ -145,9 +145,10 @@ class OfficialQwenAgent:
         knowledge_prompt = ("Based on the following instruction, assist me in generating relevant knowledge. "
                             "Please specify the types of descriptions that the recommended items should include. "
                             "Do not directly recommend specific items. \n. Don’t use numerical numbering for the "
-                            f"generated content; you can use bullet points instead. \n Instruction:{example.instruction}")
+                            f"generated content; you can use bullet points instead. Use no more than 40 words. \n "
+                            f"Instruction:{example.instruction}")
         messages = [{"role": "assistant", "content": knowledge_prompt}]
-        knowledge = self._ask(messages, {"knowledge": {"type": "string"}}, ["knowledge"], max_tokens=128)["knowledge"]
+        knowledge = self._ask(messages, {"knowledge": {"type": "string"}}, ["knowledge"], max_tokens=96)["knowledge"]
         prompt = ("Based on the information, give recommendations for the user based on the constraints. .\n "
                   "Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
                   f"Candidate ranking list:{self._candidate_text(example, mapping)},Knowledge:{knowledge},"
@@ -178,10 +179,11 @@ class OfficialQwenAgent:
         knowledge_messages = [{"role": "assistant", "content":
             "Based on the following instruction, assist me in generating relevant knowledge. Please specify the types "
             "of descriptions that the recommended items should include. Do not directly recommend specific items. \n. "
-            "Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
+            "Don’t use numerical numbering for the generated content; you can use bullet points instead. Use no more "
+            "than 40 words. \n "
             f"Instruction:{example.instruction}"}]
         knowledge = self._ask(knowledge_messages, {"knowledge": {"type": "string"}}, ["knowledge"],
-                              max_tokens=128)["knowledge"]
+                              max_tokens=96)["knowledge"]
         memory = "".join(f"user historical information, item title:{title},item description:{_tail(description)} ;"
                          for title, description in zip(titles, descriptions))
         dynamic_prompt = ("Based on the generated knowledge and the instruction, extract some dynamic interest information "
