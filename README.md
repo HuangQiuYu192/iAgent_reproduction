@@ -72,7 +72,7 @@ cd /home/hqy/code/iAgent_reproduction
 bash scripts/run_books_iagent_deepseek_100.sh
 ```
 
-The script calls `deepseek-v4-flash` through `https://api.deepseek.com`, writes resumable JSONL results to `outputs/official_protocol/books_static_deepseek_v4_flash_100.jsonl`, and never reads a key from a file or Git.
+The script calls `deepseek-v4-flash` through `https://api.deepseek.com`, writes resumable JSONL results to `outputs/official_protocol/books_static_deepseek_v4_flash_100_v2.jsonl`, and never reads a key from a file or Git. The DeepSeek adapter adds only the provider-required system instruction to return JSON; the authors' task prompts and response fields are unchanged.
 
 Released item descriptions and reviews can exceed a local 7B model's context window. The Qwen runner therefore logs deterministic prompt budgets (`--max-static-chars 6000` and `--max-candidate-chars 600`). Treat them as experimental settings and report them with every result; increase only after verifying that the local server remains stable.
 

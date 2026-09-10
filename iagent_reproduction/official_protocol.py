@@ -105,6 +105,12 @@ class OfficialProtocolAgent:
     def _ask(self, messages: list[dict[str, str]], properties: dict[str, Any], required: list[str],
              max_tokens: int = 512) -> dict[str, Any]:
         last_error: Exception | None = None
+        request_messages = messages
+        if self.json_mode == "json_object":
+            # DeepSeek rejects json_object calls unless a request message
+            # explicitly mentions JSON.  This is transport metadata only:
+            # the authors' task prompts, fields, and protocol stay intact.
+            request_messages = [{"role": "system", "content": "Return one valid JSON object only."}, *messages]
         for attempt in range(3):
             try:
                 response_format: dict[str, Any]
@@ -113,7 +119,7 @@ class OfficialProtocolAgent:
                 else:
                     response_format = {"type": "json_object"}
                 response = self.client.chat.completions.create(
-                    model=self.model, messages=messages, temperature=0,
+                    model=self.model, messages=request_messages, temperature=0,
                     response_format=response_format, max_tokens=max_tokens,
                 )
                 return json.loads(response.choices[0].message.content or "")

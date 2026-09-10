@@ -11,4 +11,4 @@ python -m iagent_reproduction.run_official_protocol \
   --protocol-mode strict \
   --json-mode json_object \
   --limit 100 \
-  --output outputs/official_protocol/books_static_deepseek_v4_flash_100.jsonl
+  --output outputs/official_protocol/books_static_deepseek_v4_flash_100_v2.jsonl
