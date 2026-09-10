@@ -9,10 +9,16 @@ GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.85}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-8192}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-4}"
 API_KEY="${IAGENT_API_KEY:-iagent-local}"
+GUIDED_DECODING_BACKEND="${GUIDED_DECODING_BACKEND:-}"
 
 if ! command -v vllm >/dev/null; then
   echo "vllm is unavailable. First run: bash scripts/setup_qwen_vllm_3090.sh" >&2
   exit 1
+fi
+
+EXTRA_ARGS=()
+if [ -n "${GUIDED_DECODING_BACKEND}" ]; then
+  EXTRA_ARGS+=(--guided-decoding-backend "${GUIDED_DECODING_BACKEND}")
 fi
 
 echo "Serving ${MODEL_ID} at http://${HOST}:${PORT}/v1"
@@ -22,4 +28,4 @@ exec vllm serve "${MODEL_ID}" \
   --dtype half --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION}" \
   --max-model-len "${MAX_MODEL_LEN}" --max-num-seqs "${MAX_NUM_SEQS}" \
   --max-num-batched-tokens "${MAX_MODEL_LEN}" \
-  --guided-decoding-backend lm-format-enforcer
+  "${EXTRA_ARGS[@]}"
