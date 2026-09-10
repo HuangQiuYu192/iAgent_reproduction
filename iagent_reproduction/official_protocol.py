@@ -13,6 +13,7 @@ import os
 import pickle
 import random
 import re
+import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,6 +48,14 @@ def load_official_examples(data_dir: Path, *, start: int = 0, limit: int | None 
     with (data_dir / "booksAll_recagent.pkl").open("rb") as stream:
         frame = pickle.load(stream)
     mapping: dict[int, tuple[str, str]] = {}
+    # Amazon descriptions can exceed csv's conservative 128 KiB default.
+    field_limit = sys.maxsize
+    while True:
+        try:
+            csv.field_size_limit(field_limit)
+            break
+        except OverflowError:
+            field_limit //= 10
     with (data_dir / "combined_books_asin_mapping.csv").open(encoding="utf-8", newline="") as stream:
         for row in csv.DictReader(stream):
             mapping[int(row["index"])] = (str(row.get("title", "")), str(row.get("description", "")))
