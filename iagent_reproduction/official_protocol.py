@@ -83,7 +83,8 @@ class OfficialProtocolAgent:
     """
 
     def __init__(self, *, model: str, base_url: str, api_key: str, agent_type: str, rng: random.Random,
-                 protocol_mode: str = "strict", json_mode: str = "json_object"):
+                 protocol_mode: str = "strict", json_mode: str = "json_object",
+                 disable_thinking: bool = False):
         from openai import OpenAI
 
         # A bounded client timeout prevents a single malformed generation from
@@ -95,6 +96,7 @@ class OfficialProtocolAgent:
             raise ValueError("json_mode must be 'json_object' or 'json_schema'")
         self.model, self.agent_type, self.rng = model, agent_type, rng
         self.protocol_mode, self.json_mode = protocol_mode, json_mode
+        self.disable_thinking = disable_thinking
 
     @staticmethod
     def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -122,14 +124,16 @@ class OfficialProtocolAgent:
                     response_format = self._schema(properties, required)
                 else:
                     response_format = {"type": "json_object"}
-                response = self.client.chat.completions.create(
-                    model=self.model, messages=request_messages, temperature=0,
-                    response_format=response_format, max_tokens=max_tokens,
-                    # V4 Flash enables high-effort thinking by default. The
-                    # released iAgent uses a direct structured response, so
-                    # disable provider-specific reasoning for this protocol.
-                    extra_body={"thinking": {"type": "disabled"}} if self.json_mode == "json_object" else None,
-                )
+                extra_body: dict[str, Any] | None = None
+                if self.json_mode == "json_object":
+                    extra_body = {"thinking": {"type": "disabled"}}
+                elif self.disable_thinking:
+                    extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+                request: dict[str, Any] = dict(model=self.model, messages=request_messages, temperature=0,
+                                               response_format=response_format, max_tokens=max_tokens)
+                if extra_body is not None:
+                    request["extra_body"] = extra_body
+                response = self.client.chat.completions.create(**request)
                 payload = json.loads(response.choices[0].message.content or "")
                 missing = [field for field in required if field not in payload]
                 if missing:

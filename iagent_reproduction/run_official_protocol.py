@@ -22,6 +22,8 @@ def main() -> None:
                         help="strict preserves the authors' prompts and explanation field; compact is Qwen-only.")
     parser.add_argument("--json-mode", choices=("json_object", "json_schema"), default="json_object",
                         help="Provider transport. DeepSeek supports json_object; json_schema is for local vLLM.")
+    parser.add_argument("--disable-thinking", action="store_true",
+                        help="Request Qwen3 non-thinking mode through vLLM's chat-template kwargs.")
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--limit", type=int, default=10, help="Use --all for every released Books row.")
     parser.add_argument("--all", action="store_true", help="Run all 7,377 released Books rows.")
@@ -35,7 +37,8 @@ def main() -> None:
     done = completed_rows(args.output)
     agent = OfficialProtocolAgent(model=args.model, base_url=args.base_url, api_key=key,
                                   agent_type=args.agent, rng=__import__("random").Random(args.seed),
-                                  protocol_mode=args.protocol_mode, json_mode=args.json_mode)
+                                  protocol_mode=args.protocol_mode, json_mode=args.json_mode,
+                                  disable_thinking=args.disable_thinking)
     print(f"protocol=authors-public-code-compatible/{args.protocol_mode} json={args.json_mode} "
           f"agent={args.agent} candidates=10 records={len(records)} "
           f"resuming={len(done)} output={args.output}", flush=True)
