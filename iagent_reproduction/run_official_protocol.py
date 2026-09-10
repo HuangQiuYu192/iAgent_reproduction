@@ -24,6 +24,16 @@ def main() -> None:
                         help="Provider transport. DeepSeek supports json_object; json_schema is for local vLLM.")
     parser.add_argument("--disable-thinking", action="store_true",
                         help="Request Qwen3 non-thinking mode through vLLM's chat-template kwargs.")
+    parser.add_argument("--dynamic-output-budget", action="store_true",
+                        help="Derive each Qwen rerank completion cap from its rendered chat-template token count.")
+    parser.add_argument("--context-window", type=int, default=24_576,
+                        help="Serving context window used by --dynamic-output-budget.")
+    parser.add_argument("--max-output-tokens", type=int, default=16_384,
+                        help="Per-request output ceiling used by --dynamic-output-budget.")
+    parser.add_argument("--output-safety-tokens", type=int, default=256,
+                        help="Tokens reserved beyond the rendered input when budgeting output.")
+    parser.add_argument("--tokenizer", default=None,
+                        help="Local Hugging Face tokenizer used to count Qwen chat-template tokens.")
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--limit", type=int, default=10, help="Use --all for every released Books row.")
     parser.add_argument("--all", action="store_true", help="Run all 7,377 released Books rows.")
@@ -38,7 +48,12 @@ def main() -> None:
     agent = OfficialProtocolAgent(model=args.model, base_url=args.base_url, api_key=key,
                                   agent_type=args.agent, rng=__import__("random").Random(args.seed),
                                   protocol_mode=args.protocol_mode, json_mode=args.json_mode,
-                                  disable_thinking=args.disable_thinking)
+                                  disable_thinking=args.disable_thinking,
+                                  dynamic_output_budget=args.dynamic_output_budget,
+                                  context_window=args.context_window,
+                                  max_output_tokens=args.max_output_tokens,
+                                  output_safety_tokens=args.output_safety_tokens,
+                                  tokenizer_name=args.tokenizer)
     print(f"protocol=authors-public-code-compatible/{args.protocol_mode} json={args.json_mode} "
           f"agent={args.agent} candidates=10 records={len(records)} "
           f"resuming={len(done)} output={args.output}", flush=True)

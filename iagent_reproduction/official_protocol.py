@@ -84,7 +84,9 @@ class OfficialProtocolAgent:
 
     def __init__(self, *, model: str, base_url: str, api_key: str, agent_type: str, rng: random.Random,
                  protocol_mode: str = "strict", json_mode: str = "json_object",
-                 disable_thinking: bool = False):
+                 disable_thinking: bool = False, dynamic_output_budget: bool = False,
+                 context_window: int = 24_576, max_output_tokens: int = 16_384,
+                 output_safety_tokens: int = 256, tokenizer_name: str | None = None):
         from openai import OpenAI
 
         # A bounded client timeout prevents a single malformed generation from
@@ -97,6 +99,18 @@ class OfficialProtocolAgent:
         self.model, self.agent_type, self.rng = model, agent_type, rng
         self.protocol_mode, self.json_mode = protocol_mode, json_mode
         self.disable_thinking = disable_thinking
+        self.dynamic_output_budget = dynamic_output_budget
+        self.context_window = context_window
+        self.max_output_tokens = max_output_tokens
+        self.output_safety_tokens = output_safety_tokens
+        self.tokenizer: Any | None = None
+        if dynamic_output_budget:
+            if context_window <= 0 or max_output_tokens <= 0 or output_safety_tokens < 0:
+                raise ValueError("Dynamic output-budget values must be positive (safety may be zero).")
+            from transformers import AutoTokenizer
+            # The A40 Qwen service has already downloaded this tokenizer.  Do
+            # not silently contact Hugging Face during an experiment.
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_name or model, local_files_only=True)
 
     @staticmethod
     def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -130,7 +144,8 @@ class OfficialProtocolAgent:
                 elif self.disable_thinking:
                     extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
                 request: dict[str, Any] = dict(model=self.model, messages=request_messages, temperature=0,
-                                               response_format=response_format, max_tokens=max_tokens)
+                                               response_format=response_format,
+                                               max_tokens=self._completion_budget(request_messages, max_tokens))
                 if extra_body is not None:
                     request["extra_body"] = extra_body
                 response = self.client.chat.completions.create(**request)
@@ -144,6 +159,23 @@ class OfficialProtocolAgent:
                 if attempt < 2:
                     time.sleep(2 * (attempt + 1))
         raise RuntimeError(f"LLM request failed after 3 attempts: {last_error}")
+
+    def _completion_budget(self, messages: list[dict[str, str]], fallback: int) -> int:
+        """Return a per-request Qwen completion cap that cannot exceed context."""
+        if not self.dynamic_output_budget:
+            return fallback
+        assert self.tokenizer is not None
+        template_args: dict[str, Any] = {"add_generation_prompt": True, "tokenize": True}
+        if self.disable_thinking:
+            template_args["enable_thinking"] = False
+        prompt_tokens = len(self.tokenizer.apply_chat_template(messages, **template_args))
+        available = self.context_window - prompt_tokens - self.output_safety_tokens
+        if available <= 0:
+            raise ValueError(
+                f"Prompt uses {prompt_tokens} tokens, leaving no completion budget in "
+                f"the {self.context_window}-token context window (safety={self.output_safety_tokens})."
+            )
+        return min(self.max_output_tokens, available)
 
     @staticmethod
     def _static_memory(example: OfficialExample) -> str:
@@ -179,7 +211,8 @@ class OfficialProtocolAgent:
             # is ready.  This only raises the transport limit; prompts,
             # schema, candidates, and metrics stay unchanged.
             response = self._ask(messages + [{"role": "assistant", "content": prompt}], properties, required,
-                                 max_tokens=2048 if self.protocol_mode == "strict" else 128)
+                                 max_tokens=(self.max_output_tokens if self.dynamic_output_budget else 2048)
+                                 if self.protocol_mode == "strict" else 128)
             ranked = [int(item) for item in response["rerank_list"]]
             if len(ranked) == len(candidates) and set(ranked) == set(candidates):
                 return ranked
