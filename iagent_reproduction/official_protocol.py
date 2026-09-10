@@ -126,17 +126,17 @@ class OfficialQwenAgent:
     def _rank_schema() -> tuple[dict[str, Any], list[str]]:
         return ({"rerank_list": {"type": "array", "items": {"type": "integer"}},
                  # The public code logs explanations but never evaluates them.
-                 # Bounding them keeps a local 7B model from exhausting the
-                 # response budget before it closes the structured JSON.
-                 "explanation": {"type": "array", "maxItems": 10,
-                                 "items": {"type": "string", "maxLength": 120}}},
+                 # Require an empty array so a local 7B model reserves its
+                 # response budget for the only scored field: rerank_list.
+                 "explanation": {"type": "array", "maxItems": 0,
+                                 "items": {"type": "string"}}},
                 ["rerank_list", "explanation"])
 
     def _rerank(self, messages: list[dict[str, str]], prompt: str, candidates: list[int]) -> list[int]:
         properties, required = self._rank_schema()
         for retry in range(4):
             response = self._ask(messages + [{"role": "assistant", "content": prompt}], properties, required,
-                                 max_tokens=512)
+                                 max_tokens=128)
             ranked = [int(item) for item in response["rerank_list"]]
             if len(ranked) == len(candidates) and set(ranked) == set(candidates):
                 return ranked
