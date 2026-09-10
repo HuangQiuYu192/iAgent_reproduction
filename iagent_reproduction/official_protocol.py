@@ -147,7 +147,7 @@ class OfficialQwenAgent:
                             "Do not directly recommend specific items. \n. Don’t use numerical numbering for the "
                             f"generated content; you can use bullet points instead. \n Instruction:{example.instruction}")
         messages = [{"role": "assistant", "content": knowledge_prompt}]
-        knowledge = self._ask(messages, {"knowledge": {"type": "string"}}, ["knowledge"], max_tokens=256)["knowledge"]
+        knowledge = self._ask(messages, {"knowledge": {"type": "string"}}, ["knowledge"], max_tokens=128)["knowledge"]
         prompt = ("Based on the information, give recommendations for the user based on the constraints. .\n "
                   "Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
                   f"Candidate ranking list:{self._candidate_text(example, mapping)},Knowledge:{knowledge},"
@@ -181,7 +181,7 @@ class OfficialQwenAgent:
             "Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
             f"Instruction:{example.instruction}"}]
         knowledge = self._ask(knowledge_messages, {"knowledge": {"type": "string"}}, ["knowledge"],
-                              max_tokens=256)["knowledge"]
+                              max_tokens=128)["knowledge"]
         memory = "".join(f"user historical information, item title:{title},item description:{_tail(description)} ;"
                          for title, description in zip(titles, descriptions))
         dynamic_prompt = ("Based on the generated knowledge and the instruction, extract some dynamic interest information "
