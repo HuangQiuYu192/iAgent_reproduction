@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from .evaluation import ranking_metrics
@@ -34,11 +35,17 @@ def main() -> None:
                         help="Tokens reserved beyond the rendered input when budgeting output.")
     parser.add_argument("--tokenizer", default=None,
                         help="Local Hugging Face tokenizer used to count Qwen chat-template tokens.")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="Concurrent user requests. Use 1 for the authors' serial driver.")
     parser.add_argument("--start", type=int, default=0)
     parser.add_argument("--limit", type=int, default=10, help="Use --all for every released Books row.")
     parser.add_argument("--all", action="store_true", help="Run all 7,377 released Books rows.")
     parser.add_argument("--seed", type=int, default=2025, help="Controls i2Agent's feedback negative sampling.")
     args = parser.parse_args()
+    if args.workers < 1:
+        raise ValueError("--workers must be at least 1")
+    if args.workers > 1 and args.agent == "dynamic":
+        raise ValueError("Parallel workers are not supported for dynamic i²Agent because feedback sampling is ordered.")
     key = os.environ.get("IAGENT_API_KEY") or os.environ.get("DEEPSEEK_API_KEY")
     if not key:
         raise RuntimeError("Set IAGENT_API_KEY (or DEEPSEEK_API_KEY for DeepSeek) in the server environment.")
@@ -55,23 +62,34 @@ def main() -> None:
                                   output_safety_tokens=args.output_safety_tokens,
                                   tokenizer_name=args.tokenizer)
     print(f"protocol=authors-public-code-compatible/{args.protocol_mode} json={args.json_mode} "
-          f"agent={args.agent} candidates=10 records={len(records)} "
+          f"agent={args.agent} workers={args.workers} candidates=10 records={len(records)} "
           f"resuming={len(done)} output={args.output}", flush=True)
-    for ordinal, record in enumerate(records, 1):
-        if record.row_index in done:
-            continue
+
+    def run_one(record):
         started = time.perf_counter()
         try:
             ranked = agent.rank(record, mapping)
             metric = ranking_metrics([str(item) for item in ranked], str(record.target_id))
-            append_result(args.output, {"status": "ok", "row_index": record.row_index, "user_id": record.user_id,
-                                        "target_id": record.target_id, "ranked": ranked, "metrics": metric,
-                                        "seconds": round(time.perf_counter() - started, 3)})
+            return {"status": "ok", "row_index": record.row_index, "user_id": record.user_id,
+                    "target_id": record.target_id, "ranked": ranked, "metrics": metric,
+                    "seconds": round(time.perf_counter() - started, 3)}
         except Exception as exc:
-            append_result(args.output, {"status": "error", "row_index": record.row_index, "user_id": record.user_id,
-                                        "error": repr(exc), "seconds": round(time.perf_counter() - started, 3)})
+            return {"status": "error", "row_index": record.row_index, "user_id": record.user_id,
+                    "error": repr(exc), "seconds": round(time.perf_counter() - started, 3)}
+
+    pending = [record for record in records if record.row_index not in done]
+    if args.workers == 1:
+        results = (run_one(record) for record in pending)
+    else:
+        executor = ThreadPoolExecutor(max_workers=args.workers)
+        futures = [executor.submit(run_one, record) for record in pending]
+        results = (future.result() for future in as_completed(futures))
+    for ordinal, result in enumerate(results, 1):
+        append_result(args.output, result)
         if ordinal % 10 == 0:
             print(summarize(args.output), flush=True)
+    if args.workers > 1:
+        executor.shutdown(wait=True)
     print(summarize(args.output), flush=True)
 
 

@@ -15,5 +15,6 @@ python -m iagent_reproduction.run_official_protocol \
   --max-output-tokens 16384 \
   --output-safety-tokens 256 \
   --tokenizer Qwen/Qwen3-14B \
+  --workers 2 \
   --limit 100 \
   --output outputs/official_protocol/books_static_qwen3_14b_fp16_100.jsonl
