@@ -125,7 +125,11 @@ class OfficialQwenAgent:
     @staticmethod
     def _rank_schema() -> tuple[dict[str, Any], list[str]]:
         return ({"rerank_list": {"type": "array", "items": {"type": "integer"}},
-                 "explanation": {"type": "array", "items": {"type": "string"}}},
+                 # The public code logs explanations but never evaluates them.
+                 # Bounding them keeps a local 7B model from exhausting the
+                 # response budget before it closes the structured JSON.
+                 "explanation": {"type": "array", "maxItems": 10,
+                                 "items": {"type": "string", "maxLength": 120}}},
                 ["rerank_list", "explanation"])
 
     def _rerank(self, messages: list[dict[str, str]], prompt: str, candidates: list[int]) -> list[int]:
