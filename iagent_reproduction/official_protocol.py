@@ -108,9 +108,13 @@ class OfficialProtocolAgent:
         request_messages = messages
         if self.json_mode == "json_object":
             # DeepSeek rejects json_object calls unless a request message
-            # explicitly mentions JSON.  This is transport metadata only:
-            # the authors' task prompts, fields, and protocol stay intact.
-            request_messages = [{"role": "system", "content": "Return one valid JSON object only."}, *messages]
+            # explicitly mentions JSON and shows its required fields. This is
+            # transport metadata only: the authors' task prompts, fields, and
+            # protocol stay intact.
+            fields = ", ".join(required)
+            request_messages = [{"role": "system", "content":
+                                 f"Return one valid JSON object only. Required keys: {fields}. "
+                                 "Do not use Markdown or add any other keys."}, *messages]
         for attempt in range(3):
             try:
                 response_format: dict[str, Any]
@@ -121,8 +125,16 @@ class OfficialProtocolAgent:
                 response = self.client.chat.completions.create(
                     model=self.model, messages=request_messages, temperature=0,
                     response_format=response_format, max_tokens=max_tokens,
+                    # V4 Flash enables high-effort thinking by default. The
+                    # released iAgent uses a direct structured response, so
+                    # disable provider-specific reasoning for this protocol.
+                    extra_body={"thinking": {"type": "disabled"}} if self.json_mode == "json_object" else None,
                 )
-                return json.loads(response.choices[0].message.content or "")
+                payload = json.loads(response.choices[0].message.content or "")
+                missing = [field for field in required if field not in payload]
+                if missing:
+                    raise ValueError(f"JSON response missing required keys: {missing}")
+                return payload
             except Exception as exc:  # provider errors and invalid JSON share the same retry policy
                 last_error = exc
                 if attempt < 2:
