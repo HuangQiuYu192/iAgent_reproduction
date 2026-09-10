@@ -6,6 +6,9 @@ MODEL_ID="${MODEL_ID:-Qwen/Qwen3-14B}"
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8001}"
 API_KEY="${IAGENT_API_KEY:-iagent-qwen3-local}"
+# The shared A40 host is addressed by physical GPU number.  Pin this process
+# before vLLM imports CUDA; inside the process it will appear as device 0.
+export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-1}"
 # The A40 host cannot reliably reach huggingface.co directly. Override this
 # only when your site has another approved Hugging Face endpoint.
 export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
