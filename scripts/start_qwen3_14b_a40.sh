@@ -9,9 +9,11 @@ API_KEY="${IAGENT_API_KEY:-iagent-qwen3-local}"
 # The A40 host cannot reliably reach huggingface.co directly. Override this
 # only when your site has another approved Hugging Face endpoint.
 export HF_ENDPOINT="${HF_ENDPOINT:-https://hf-mirror.com}"
+# FP16 Qwen3-14B leaves 4.82 GiB KV cache at 32K on a 46 GiB A40, while
+# vLLM needs 5.00 GiB. 24K still exceeds this protocol's observed prompts.
 
 exec vllm serve "${MODEL_ID}" \
   --host "${HOST}" --port "${PORT}" --api-key "${API_KEY}" \
   --dtype half --gpu-memory-utilization "${GPU_MEMORY_UTILIZATION:-0.85}" \
-  --max-model-len "${MAX_MODEL_LEN:-32768}" --max-num-seqs "${MAX_NUM_SEQS:-1}" \
-  --max-num-batched-tokens "${MAX_MODEL_LEN:-32768}"
+  --max-model-len "${MAX_MODEL_LEN:-24576}" --max-num-seqs "${MAX_NUM_SEQS:-1}" \
+  --max-num-batched-tokens "${MAX_MODEL_LEN:-24576}"
