@@ -124,13 +124,10 @@ class OfficialQwenAgent:
 
     @staticmethod
     def _rank_schema() -> tuple[dict[str, Any], list[str]]:
-        return ({"rerank_list": {"type": "array", "items": {"type": "integer"}},
-                 # The public code logs explanations but never evaluates them.
-                 # Require an empty array so a local 7B model reserves its
-                 # response budget for the only scored field: rerank_list.
-                 "explanation": {"type": "array", "maxItems": 0,
-                                 "items": {"type": "string"}}},
-                ["rerank_list", "explanation"])
+        # The authors log ``explanation`` but never consume it for reflection
+        # or any reported metric. Omitting it is necessary for vLLM/Qwen's
+        # constrained decoder to close a compact, valid ranking response.
+        return ({"rerank_list": {"type": "array", "items": {"type": "integer"}}}, ["rerank_list"])
 
     def _rerank(self, messages: list[dict[str, str]], prompt: str, candidates: list[int]) -> list[int]:
         properties, required = self._rank_schema()
