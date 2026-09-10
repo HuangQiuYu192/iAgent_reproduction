@@ -75,16 +75,26 @@ def load_official_examples(data_dir: Path, *, start: int = 0, limit: int | None 
     return records, mapping
 
 
-class OfficialQwenAgent:
-    """Same one-round iAgent/i2Agent control flow as the public implementation."""
+class OfficialProtocolAgent:
+    """Runnable iAgent/i²Agent protocol with provider-selectable JSON transport.
 
-    def __init__(self, *, model: str, base_url: str, api_key: str, agent_type: str, rng: random.Random):
+    ``strict`` preserves the authors' public prompt text and response fields.
+    ``compact`` is retained exclusively for the earlier local-Qwen baseline.
+    """
+
+    def __init__(self, *, model: str, base_url: str, api_key: str, agent_type: str, rng: random.Random,
+                 protocol_mode: str = "strict", json_mode: str = "json_object"):
         from openai import OpenAI
 
         # A bounded client timeout prevents a single malformed generation from
         # blocking a multi-day checkpointed run indefinitely.
         self.client = OpenAI(base_url=base_url, api_key=api_key, timeout=120.0)
+        if protocol_mode not in {"strict", "compact"}:
+            raise ValueError("protocol_mode must be 'strict' or 'compact'")
+        if json_mode not in {"json_object", "json_schema"}:
+            raise ValueError("json_mode must be 'json_object' or 'json_schema'")
         self.model, self.agent_type, self.rng = model, agent_type, rng
+        self.protocol_mode, self.json_mode = protocol_mode, json_mode
 
     @staticmethod
     def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -97,9 +107,14 @@ class OfficialQwenAgent:
         last_error: Exception | None = None
         for attempt in range(3):
             try:
+                response_format: dict[str, Any]
+                if self.json_mode == "json_schema":
+                    response_format = self._schema(properties, required)
+                else:
+                    response_format = {"type": "json_object"}
                 response = self.client.chat.completions.create(
                     model=self.model, messages=messages, temperature=0,
-                    response_format=self._schema(properties, required), max_tokens=max_tokens,
+                    response_format=response_format, max_tokens=max_tokens,
                 )
                 return json.loads(response.choices[0].message.content or "")
             except Exception as exc:  # provider errors and invalid JSON share the same retry policy
@@ -124,31 +139,43 @@ class OfficialQwenAgent:
 
     @staticmethod
     def _rank_schema() -> tuple[dict[str, Any], list[str]]:
-        # The authors log ``explanation`` but never consume it for reflection
-        # or any reported metric. Omitting it is necessary for vLLM/Qwen's
-        # constrained decoder to close a compact, valid ranking response.
         return ({"rerank_list": {"type": "array", "items": {"type": "integer"}}}, ["rerank_list"])
 
+    def _response_schema(self) -> tuple[dict[str, Any], list[str]]:
+        if self.protocol_mode == "compact":
+            return self._rank_schema()
+        return ({"rerank_list": {"type": "array", "items": {"type": "integer"}},
+                 "explanation": {"type": "array", "items": {"type": "string"}}},
+                ["rerank_list", "explanation"])
+
     def _rerank(self, messages: list[dict[str, str]], prompt: str, candidates: list[int]) -> list[int]:
-        properties, required = self._rank_schema()
+        properties, required = self._response_schema()
         for retry in range(4):
             response = self._ask(messages + [{"role": "assistant", "content": prompt}], properties, required,
-                                 max_tokens=128)
+                                 max_tokens=1024 if self.protocol_mode == "strict" else 128)
             ranked = [int(item) for item in response["rerank_list"]]
             if len(ranked) == len(candidates) and set(ranked) == set(candidates):
                 return ranked
-            prompt = ("Your previous rerank list was invalid. Return each and only each ID from the pure ranking "
-                      f"list exactly once. Pure Ranking List:{candidates}")
+            if self.protocol_mode == "strict":
+                prompt = ("Rerank list is out of the order, you should rerank the item from the pure ranking list. "
+                          f"The previous list:{ranked}. Therefore, try it again according the following information. "
+                          "\n Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
+                          f"{prompt} Please generate the reranked list from Pure Ranking List:{candidates}. "
+                          f"The length of the reranked list should be {len(candidates)}.")
+            else:
+                prompt = ("Your previous rerank list was invalid. Return each and only each ID from the pure ranking "
+                          f"list exactly once. Pure Ranking List:{candidates}")
         raise RuntimeError("self-reflection failed to return a permutation of the candidate slate")
 
     def static(self, example: OfficialExample, mapping: dict[int, tuple[str, str]]) -> list[int]:
         knowledge_prompt = ("Based on the following instruction, assist me in generating relevant knowledge. "
                             "Please specify the types of descriptions that the recommended items should include. "
                             "Do not directly recommend specific items. \n. Don’t use numerical numbering for the "
-                            f"generated content; you can use bullet points instead. Use no more than 40 words. \n "
+                            "generated content; you can use bullet points instead. \n "
                             f"Instruction:{example.instruction}")
         messages = [{"role": "assistant", "content": knowledge_prompt}]
-        knowledge = self._ask(messages, {"knowledge": {"type": "string"}}, ["knowledge"], max_tokens=96)["knowledge"]
+        knowledge = self._ask(messages, {"knowledge": {"type": "string"}}, ["knowledge"],
+                              max_tokens=1024 if self.protocol_mode == "strict" else 96)["knowledge"]
         prompt = ("Based on the information, give recommendations for the user based on the constraints. .\n "
                   "Don’t use numerical numbering for the generated content; you can use bullet points instead. \n "
                   f"Candidate ranking list:{self._candidate_text(example, mapping)},Knowledge:{knowledge},"
@@ -183,7 +210,7 @@ class OfficialQwenAgent:
             "than 40 words. \n "
             f"Instruction:{example.instruction}"}]
         knowledge = self._ask(knowledge_messages, {"knowledge": {"type": "string"}}, ["knowledge"],
-                              max_tokens=96)["knowledge"]
+                              max_tokens=1024 if self.protocol_mode == "strict" else 96)["knowledge"]
         memory = "".join(f"user historical information, item title:{title},item description:{_tail(description)} ;"
                          for title, description in zip(titles, descriptions))
         dynamic_prompt = ("Based on the generated knowledge and the instruction, extract some dynamic interest information "

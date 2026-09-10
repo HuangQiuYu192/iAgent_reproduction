@@ -60,6 +60,20 @@ python -m iagent_reproduction.run_instructrec --domain books --agent iagent --ba
 python -m iagent_reproduction.run_instructrec --domain books --agent i2agent --backend teaching --users 5
 ```
 
+## Strict API protocol: DeepSeek V4 Flash
+
+`run_official_protocol` has two deliberately separate modes. `strict` preserves the authors' public prompts, free-text `knowledge`, and `explanation` response field; it uses a 1,024-token per-call safety ceiling only to prevent abnormal billing. `compact` is the earlier local-Qwen compatibility baseline and must not be reported as a strict reproduction.
+
+On A40, keep the real key outside the repository and run the 100-user pilot:
+
+```bash
+export DEEPSEEK_API_KEY='your-private-key'
+cd /home/hqy/code/iAgent_reproduction
+bash scripts/run_books_iagent_deepseek_100.sh
+```
+
+The script calls `deepseek-v4-flash` through `https://api.deepseek.com`, writes resumable JSONL results to `outputs/official_protocol/books_static_deepseek_v4_flash_100.jsonl`, and never reads a key from a file or Git.
+
 Released item descriptions and reviews can exceed a local 7B model's context window. The Qwen runner therefore logs deterministic prompt budgets (`--max-static-chars 6000` and `--max-candidate-chars 600`). Treat them as experimental settings and report them with every result; increase only after verifying that the local server remains stable.
 
 Use Qwen only after this smoke test passes. i²Agent runs one profile-update LLM call per training interaction, so begin with one user:
