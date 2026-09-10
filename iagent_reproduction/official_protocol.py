@@ -84,7 +84,7 @@ class OfficialProtocolAgent:
 
     def __init__(self, *, model: str, base_url: str, api_key: str, agent_type: str, rng: random.Random,
                  protocol_mode: str = "strict", json_mode: str = "json_object",
-                 disable_thinking: bool = False):
+                 disable_thinking: bool = False, bounded_explanations: bool = False):
         from openai import OpenAI
 
         # A bounded client timeout prevents a single malformed generation from
@@ -97,6 +97,7 @@ class OfficialProtocolAgent:
         self.model, self.agent_type, self.rng = model, agent_type, rng
         self.protocol_mode, self.json_mode = protocol_mode, json_mode
         self.disable_thinking = disable_thinking
+        self.bounded_explanations = bounded_explanations
 
     @staticmethod
     def _schema(properties: dict[str, Any], required: list[str]) -> dict[str, Any]:
@@ -166,8 +167,19 @@ class OfficialProtocolAgent:
     def _response_schema(self) -> tuple[dict[str, Any], list[str]]:
         if self.protocol_mode == "compact":
             return self._rank_schema()
-        return ({"rerank_list": {"type": "array", "items": {"type": "integer"}},
-                 "explanation": {"type": "array", "items": {"type": "string"}}},
+        rerank_list: dict[str, Any] = {"type": "array", "items": {"type": "integer"}}
+        explanation_item: dict[str, Any] = {"type": "string"}
+        explanation: dict[str, Any] = {"type": "array", "items": explanation_item}
+        if self.bounded_explanations:
+            # This Qwen/vLLM transport guard is deliberately limited to the
+            # non-metric explanation field.  At 10 short strings (100 Unicode
+            # characters each), even a worst-case JSON encoding fits below the
+            # 2K completion budget; the original prompts and ranking contract
+            # are unaffected.
+            rerank_list.update({"minItems": 10, "maxItems": 10})
+            explanation_item["maxLength"] = 100
+            explanation["maxItems"] = 10
+        return ({"rerank_list": rerank_list, "explanation": explanation},
                 ["rerank_list", "explanation"])
 
     def _rerank(self, messages: list[dict[str, str]], prompt: str, candidates: list[int]) -> list[int]:

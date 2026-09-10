@@ -10,5 +10,6 @@ python -m iagent_reproduction.run_official_protocol \
   --protocol-mode strict \
   --json-mode json_schema \
   --disable-thinking \
+  --bounded-explanations \
   --limit 100 \
   --output outputs/official_protocol/books_static_qwen3_14b_fp16_100.jsonl
