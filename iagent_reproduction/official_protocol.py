@@ -173,8 +173,13 @@ class OfficialProtocolAgent:
     def _rerank(self, messages: list[dict[str, str]], prompt: str, candidates: list[int]) -> list[int]:
         properties, required = self._response_schema()
         for retry in range(4):
+            # The authors' strict response includes free-form explanations for
+            # every candidate.  A 1K completion cap can cut a valid JSON
+            # string mid-token on local models, even when the ranking itself
+            # is ready.  This only raises the transport limit; prompts,
+            # schema, candidates, and metrics stay unchanged.
             response = self._ask(messages + [{"role": "assistant", "content": prompt}], properties, required,
-                                 max_tokens=1024 if self.protocol_mode == "strict" else 128)
+                                 max_tokens=2048 if self.protocol_mode == "strict" else 128)
             ranked = [int(item) for item in response["rerank_list"]]
             if len(ranked) == len(candidates) and set(ranked) == set(candidates):
                 return ranked
